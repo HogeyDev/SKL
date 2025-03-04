@@ -1,11 +1,25 @@
-#include "cpu.h"
 #include "iset.h"
+#include "cpu.h"
 
-#include <cmath>
+#include <cstdlib>
 #include <cstdio>
+#include <cmath>
 
-#define print_reg(width, n) \
-    printf(#n": %0*lx\n", width, cpu->n)
+std::vector<byte> split_number(arch n) {
+    std::vector<byte> bytes;
+    for (unsigned int i = 0; i < sizeof(arch); i++) {
+        bytes.insert(bytes.begin(), n >> (8 * i) & 0xff);
+    }
+    return bytes;
+}
+
+Cpu initialize_cpu() {
+    Cpu cpu = { 0 };
+
+    cpu.memory = (byte *)malloc(MEMORY_SIZE);
+
+    return cpu;
+}
 
 void print_cpu_state(Cpu *cpu) {
     static const unsigned int width = sizeof(arch) * 2;
@@ -21,12 +35,12 @@ void print_cpu_state(Cpu *cpu) {
 
 void print_stack_context(Cpu *cpu, int addr, int w[2]) {
     arch left = std::max(addr + w[0], 0);
-    arch right = std::min(addr+ w[1], STACK_SIZE);
+    arch right = std::min(addr+ w[1], MEMORY_SIZE);
 
     const unsigned int grouping = 4;
     const unsigned int breaks = 4;
 
-    unsigned int address_width = (unsigned int)std::ceil(std::log2((float)STACK_SIZE) / 4.0f);
+    unsigned int address_width = (unsigned int)std::ceil(std::log2((float)MEMORY_SIZE) / 4.0f);
     printf("%0*lx: ", address_width, left);
     for (arch i = left; i <= right; i++) {
         arch di = i - left;
@@ -67,175 +81,183 @@ arch *id_to_reg(Cpu *cpu, byte id) {
         case 0b110: reg = &cpu->rsp; break;
         case 0b111: reg = &cpu->rip; break;
         default:
-            fprintf(stderr, "unknown register: %03b\n", id);
+            fprintf(stderr, "unknown register: %d\n", id);
     }
     return reg;
 }
 
+void next_instruction(Cpu *cpu) {
+    byte opcode = cpu->memory[cpu->rip];
+    cpu->rip++;
+
+    switch (opcode) {
+        case Nop: break;
+        case MovRegReg: {
+                            byte modrm = cpu->memory[cpu->rip];
+                            cpu->rip++;
+                            switch (modrm >> 6) {
+                                case 0b00: { // reg -> reg
+                                               arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               *dest = *src;
+                                           }
+                                           break;
+                                case 0b01: { // reg -> mem
+                                               arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               cpu->memory[*dest] = *src;
+                                           }
+                                           break;
+                                case 0b10: { // mem -> reg
+                                               arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               *dest = cpu->memory[*src];
+                                           }
+                                           break;
+                                default:
+                                           fprintf(stderr, "illegal mod bits: %d (opcode: %d)\n", modrm >> 6, opcode);
+                            }
+                        }
+                  break;
+        case MovRegImm: {
+                            byte modrm = cpu->memory[cpu->rip];
+                            cpu->rip++;
+                            switch (modrm >> 6) {
+                                case 0b00: { // imm -> reg
+                                               arch value = 0;
+                                               for (unsigned int i = 0; i < sizeof(arch); i++) {
+                                                   byte tmp = cpu->memory[cpu->rip];
+                                                   cpu->rip++;
+                                                   value <<= 8;
+                                                   value |= tmp;
+                                               }
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               *dest = value;
+                                           }
+                                           break;
+                                case 0b01: { // imm -> mem
+                                               arch value = 0;
+                                               for (unsigned int i = 0; i < sizeof(arch); i++) {
+                                                   byte tmp = cpu->memory[cpu->rip];
+                                                   cpu->rip++;
+                                                   value <<= 8;
+                                                   value |= tmp;
+                                               }
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+                                               if (*dest >= MEMORY_SIZE) {
+                                                   break;
+                                               }
+
+                                               cpu->memory[*dest] = value;
+                                           }
+                                           break;
+                                case 0b10: { // mem -> reg
+                                               arch value = 0;
+                                               for (unsigned int i = 0; i < sizeof(arch); i++) {
+                                                   byte tmp = cpu->memory[cpu->rip];
+                                                   cpu->rip++;
+                                                   value <<= 8;
+                                                   value |= tmp;
+                                               }
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               *dest = cpu->memory[value];
+                                           }
+                                           break;
+                                default:
+                                           fprintf(stderr, "illegal mod bits: %d (opcode: %d)\n", modrm >> 6, opcode);
+                            }
+                        }
+                        break;
+        case AddRegReg: {
+                            byte modrm = cpu->memory[cpu->rip];
+                            cpu->rip++;
+                            switch (modrm >> 6) {
+                                case 0b00: {
+                                               arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               *dest = *dest + *src;
+                                           }
+                                           break;
+                                case 0b01: {
+                                               arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               cpu->memory[*dest] = cpu->memory[*dest] = *src;
+                                           }
+                                           break;
+                                case 0b10: {
+                                               arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               *dest = *dest + cpu->memory[*src];
+                                           }
+                                           break;
+                                default:
+                                           fprintf(stderr, "illegal mod bits: %d (opcode: %d)\n", modrm >> 6, opcode);
+                            }
+                        }
+                        break;
+        case AddRegImm: {
+                            byte modrm = cpu->memory[cpu->rip];
+                            cpu->rip++;
+                            switch (modrm >> 6) {
+                                case 0b00: {
+                                               arch value = 0;
+                                               for (unsigned int i = 0; i < sizeof(arch); i++) {
+                                                   byte tmp = cpu->memory[cpu->rip];
+                                                   cpu->rip++;
+                                                   value <<= 8;
+                                                   value |= tmp;
+                                               }
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               *dest = *dest + value;
+                                           }
+                                           break;
+                                case 0b01: {
+                                               arch value = 0;
+                                               for (unsigned int i = 0; i < sizeof(arch); i++) {
+                                                   byte tmp = cpu->memory[cpu->rip];
+                                                   cpu->rip++;
+                                                   value <<= 8;
+                                                   value |= tmp;
+                                               }
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               cpu->memory[*dest] = cpu->memory[*dest] + value;
+                                           }
+                                           break;
+                                case 0b10: {
+                                               arch value = 0;
+                                               for (unsigned int i = 0; i < sizeof(arch); i++) {
+                                                   byte tmp = cpu->memory[cpu->rip];
+                                                   cpu->rip++;
+                                                   value <<= 8;
+                                                   value |= tmp;
+                                               }
+                                               arch *dest = id_to_reg(cpu, modrm & 0b111);
+
+                                               *dest = *dest + cpu->memory[value];
+                                           }
+                                           break;
+                                default:
+                                           fprintf(stderr, "illegal mod bits: %d (opcode: %d)\n", modrm >> 6, opcode);
+                            }
+                        }
+                        break;
+        default:
+                        fprintf(stderr, "unknown opcode: %02x\n", opcode);
+    }
+}
+
 void execute_program(Cpu *cpu) {
-    while (cpu->rip < STACK_SIZE) {
-        byte opcode = cpu->memory[cpu->rip];
-        cpu->rip++;
-
-        switch (opcode) {
-            case Nop: break;
-            case MovRegReg: {
-                                byte modrm = cpu->memory[cpu->rip];
-                                cpu->rip++;
-                                switch (modrm >> 6) {
-                                    case 0b00: { // reg -> reg
-                                                   arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   *dest = *src;
-                                               }
-                                               break;
-                                    case 0b01: { // reg -> mem
-                                                   arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   cpu->memory[*dest] = *src;
-                                               }
-                                               break;
-                                    case 0b10: { // mem -> reg
-                                                   arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   *dest = cpu->memory[*src];
-                                               } break;
-                                    default:
-                                               fprintf(stderr, "illegal mod bits: %d (opcode: %d)\n", modrm >> 6, opcode);
-                                }
-                            }
-                            break;
-            case MovRegImm: {
-                                byte modrm = cpu->memory[cpu->rip];
-                                cpu->rip++;
-                                switch (modrm >> 6) {
-                                    case 0b00: { // imm -> reg
-                                                   arch value = 0;
-                                                   for (unsigned int i = 0; i < sizeof(arch); i++) {
-                                                       byte tmp = cpu->memory[cpu->rip];
-                                                       cpu->rip++;
-                                                       value <<= 8;
-                                                       value |= tmp;
-                                                   }
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   *dest = value;
-                                               }
-                                               break;
-                                    case 0b01: { // imm -> mem
-                                                   arch value = 0;
-                                                   for (unsigned int i = 0; i < sizeof(arch); i++) {
-                                                       byte tmp = cpu->memory[cpu->rip];
-                                                       cpu->rip++;
-                                                       value <<= 8;
-                                                       value |= tmp;
-                                                   }
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   cpu->memory[*dest] = value;
-                                               }
-                                               break;
-                                    case 0b10: { // mem -> reg
-                                                   arch value = 0;
-                                                   for (unsigned int i = 0; i < sizeof(arch); i++) {
-                                                       byte tmp = cpu->memory[cpu->rip];
-                                                       cpu->rip++;
-                                                       value <<= 8;
-                                                       value |= tmp;
-                                                   }
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   *dest = cpu->memory[value];
-                                               }
-                                               break;
-                                    default:
-                                               fprintf(stderr, "illegal mod bits: %d (opcode: %d)\n", modrm >> 6, opcode);
-                                }
-                            }
-                            break;
-            case AddRegReg: {
-                                byte modrm = cpu->memory[cpu->rip];
-                                cpu->rip++;
-                                switch (modrm >> 6) {
-                                    case 0b00: {
-                                                   arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   *dest = *dest + *src;
-                                               }
-                                               break;
-                                    case 0b01: {
-                                                   arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   cpu->memory[*dest] = cpu->memory[*dest] = *src;
-                                               }
-                                               break;
-                                    case 0b10: {
-                                                   arch *src = id_to_reg(cpu, modrm >> 3 & 0b111);
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   *dest = *dest + cpu->memory[*src];
-                                               }
-                                               break;
-                                    default:
-                                               fprintf(stderr, "illegal mod bits: %d (opcode: %d)\n", modrm >> 6, opcode);
-                                }
-                            }
-                            break;
-            case AddRegImm: {
-                                byte modrm = cpu->memory[cpu->rip];
-                                cpu->rip++;
-                                switch (modrm >> 6) {
-                                    case 0b00: {
-                                                   arch value = 0;
-                                                   for (unsigned int i = 0; i < sizeof(arch); i++) {
-                                                       byte tmp = cpu->memory[cpu->rip];
-                                                       cpu->rip++;
-                                                       value <<= 8;
-                                                       value |= tmp;
-                                                   }
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   *dest = *dest + value;
-                                               }
-                                               break;
-                                    case 0b01: {
-                                                   arch value = 0;
-                                                   for (unsigned int i = 0; i < sizeof(arch); i++) {
-                                                       byte tmp = cpu->memory[cpu->rip];
-                                                       cpu->rip++;
-                                                       value <<= 8;
-                                                       value |= tmp;
-                                                   }
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   cpu->memory[*dest] = cpu->memory[*dest] + value;
-                                               }
-                                               break;
-                                    case 0b10: {
-                                                   arch value = 0;
-                                                   for (unsigned int i = 0; i < sizeof(arch); i++) {
-                                                       byte tmp = cpu->memory[cpu->rip];
-                                                       cpu->rip++;
-                                                       value <<= 8;
-                                                       value |= tmp;
-                                                   }
-                                                   arch *dest = id_to_reg(cpu, modrm & 0b111);
-
-                                                   *dest = *dest + cpu->memory[value];
-                                               }
-                                               break;
-                                    default:
-                                               fprintf(stderr, "illegal mod bits: %d (opcode: %d)\n", modrm >> 6, opcode);
-                                }
-                            }
-                            break;
-            default:
-                      fprintf(stderr, "unknown opcode: %02x\n", opcode);
-        }
+    while (cpu->rip < MEMORY_SIZE) {
+        next_instruction(cpu);
     }
 }

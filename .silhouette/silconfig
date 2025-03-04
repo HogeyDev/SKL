@@ -4,4 +4,5 @@ header_ext h
 source ./src
 include ./src/include
 build ./build
-ldargs 
+ccargs -pthread
+ldargs -lSDL2
