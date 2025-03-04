@@ -11,7 +11,7 @@
 
 void display_tick(SDL_Renderer *renderer, Cpu *cpu) {
     SDL_Event event;
-    while (true) {
+    // while (true) {
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
                 case SDL_QUIT:
@@ -34,15 +34,15 @@ void display_tick(SDL_Renderer *renderer, Cpu *cpu) {
             // printf("%0*lx\n", (unsigned int)(sizeof(arch) * 2), cpu.rip);
         }
 
-        SDL_Delay(1000.0f / 60.0f);
+        // SDL_Delay(1000.0f / 60.0f);
 
         SDL_RenderPresent(renderer);
-    }
+    // }
 }
 void process_tick(Cpu *cpu) {
-    while (true) {
+    // while (true) {
         next_instruction(cpu);
-    }
+    // }
 }
 
 int main(void) {
@@ -67,8 +67,13 @@ int main(void) {
     SDL_Renderer *renderer;
     SDL_CreateWindowAndRenderer(854, 480, 0, &window, &renderer);
 
-    std::thread process_thread(process_tick, &cpu);
-    std::thread display_thread(display_tick, renderer, &cpu);
+    // std::thread process_thread(process_tick, &cpu);
+    // std::thread display_thread(display_tick, renderer, &cpu);
+
+    while (true) {
+        process_tick(&cpu);
+        display_tick(renderer, &cpu);
+    }
 
     return 0;
 }
