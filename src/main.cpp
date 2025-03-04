@@ -2,9 +2,9 @@
 #include <SDL2/SDL_render.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_timer.h>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
-#include <thread>
 
 #include "iset.h"
 #include "cpu.h"
@@ -17,6 +17,7 @@ void display_tick(SDL_Renderer *renderer, Cpu *cpu) {
                 case SDL_QUIT:
                     SDL_Quit();
                     exit(0);
+                default: break;
             }
         }
 
@@ -34,15 +35,13 @@ void display_tick(SDL_Renderer *renderer, Cpu *cpu) {
             // printf("%0*lx\n", (unsigned int)(sizeof(arch) * 2), cpu.rip);
         }
 
-        // SDL_Delay(1000.0f / 60.0f);
-
         SDL_RenderPresent(renderer);
+
+        // SDL_Delay(1000.0f / 60.0f);
     // }
 }
 void process_tick(Cpu *cpu) {
-    // while (true) {
-        next_instruction(cpu);
-    // }
+    next_instruction(cpu);
 }
 
 int main(void) {
@@ -67,13 +66,25 @@ int main(void) {
     SDL_Renderer *renderer;
     SDL_CreateWindowAndRenderer(854, 480, 0, &window, &renderer);
 
-    // std::thread process_thread(process_tick, &cpu);
     // std::thread display_thread(display_tick, renderer, &cpu);
 
+    static const unsigned int batch_processing = 1000;
+    static const float frame_millis = 1000.0f / 60.0f;
+
     while (true) {
-        process_tick(&cpu);
+        std::chrono::time_point start = std::chrono::high_resolution_clock::now();
+        while (true) {
+            for (unsigned int i = 0; i < batch_processing; i++) {
+                process_tick(&cpu);
+            }
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start).count() >= frame_millis) {
+                break;
+            }
+        }
         display_tick(renderer, &cpu);
     }
+
+    // display_thread.join();
 
     return 0;
 }
