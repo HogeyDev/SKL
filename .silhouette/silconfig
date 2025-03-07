@@ -1,7 +1,0 @@
-compiler g++
-source_ext cpp
-header_ext h
-source ./src
-include ./src/include
-build ./build
-ldargs -lSDL2
