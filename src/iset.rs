@@ -29,7 +29,7 @@ pub enum OperandValue {
 
 pub type Operand = (OperandType, OperandValue);
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum Instruction {
     // [____ 00 11] [2222 3333]
     // 0: imm / reg
@@ -67,10 +67,10 @@ impl Instruction {
             }
         }
     }
-    fn split_number(n: Arch) -> Vec<u8> {
+    pub fn split_number(n: Arch) -> Vec<u8> {
         let mut bytes = Vec::new();
         for i in 0..size_of::<Arch>() {
-            bytes.insert(0, (n >> i & 0xff) as u8);
+            bytes.insert(0, (n >> (8 * i) & 0xff) as u8);
         }
         bytes
     }

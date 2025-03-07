@@ -17,8 +17,6 @@ fn main() {
     cpu.rsp = cpu.load_program(p);
     cpu.rbp = cpu.rsp;
 
-    cpu.print_stack_context((0, 16));
-    
     loop {
         if !cpu.get_flag(CpuFlag::Halt) {
             cpu.next_instruction();
@@ -26,4 +24,6 @@ fn main() {
             break;
         }
     }
+    cpu.print_registers();
+    cpu.print_stack_context((0, 32));
 }
