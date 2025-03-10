@@ -1,4 +1,4 @@
-use std::{num::Wrapping, ops::Deref};
+use std::{num::Wrapping, ptr::with_exposed_provenance};
 
 use crate::iset::{Instruction, Program};
 
@@ -98,18 +98,18 @@ impl Cpu {
         }
     }
     pub fn print_registers(&self) {
-        fn preg(name: &str, value: Arch, width: usize) {
+        fn disp_reg(name: &str, value: Arch, width: usize) {
             println!("{name}: {:0width$x}", value, width=width*2);
         }
 
-        preg("rax", self.rax, ARCH);
-        preg("rbx", self.rbx, ARCH);
-        preg("rcx", self.rcx, ARCH);
-        preg("rdx", self.rdx, ARCH);
+        disp_reg("rax", self.rax, ARCH);
+        disp_reg("rbx", self.rbx, ARCH);
+        disp_reg("rcx", self.rcx, ARCH);
+        disp_reg("rdx", self.rdx, ARCH);
 
-        preg("rbp", self.rbp, ARCH);
-        preg("rsp", self.rsp, ARCH);
-        preg("rip", self.rip, ARCH);
+        disp_reg("rbp", self.rbp, ARCH);
+        disp_reg("rsp", self.rsp, ARCH);
+        disp_reg("rip", self.rip, ARCH);
     }
 
     pub fn get_flag(&self, bit: CpuFlag) -> bool {
@@ -408,13 +408,10 @@ impl Cpu {
                 }
             }
             0x05 => {
-                unimplemented!();
                 let locb = self.get_mem(self.rip);
                 self.rip += 1;
 
                 let reg = self.get_mem(self.rip) & 0xf;
-
-                self.rip += 1;
                 match locb >> 4 & 0b11 {
                     0b01 => {
                         let mut imm: Arch = 0;
@@ -426,8 +423,16 @@ impl Cpu {
                         let val = !self.get_mem(imm);
                         self.set_mem(imm, val);
                     }
-                    // 0b10 => {}
-                    // 0b11 => {}
+                    0b10 => {
+                        let reg_addr = self.reg_code(reg);
+                        let val = !*reg_addr;
+                        *reg_addr = val;
+                    }
+                    0b11 => {
+                        let addr = self.reg_value(reg);
+                        let val = !self.get_mem(addr);
+                        self.set_mem(addr, val);
+                    }
                     x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
                 }
             }

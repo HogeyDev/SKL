@@ -6,19 +6,19 @@ pub mod cpu;
 
 fn main() {
     let p: Program = vec![
-        Instruction::Mov(
-            (OperandType::Immediate, OperandValue::Imm(12)),
-            (OperandType::Register, OperandValue::Reg(Register::Rax)),
-        ),
-        Instruction::Mov(
-            (OperandType::Immediate, OperandValue::Imm(7)),
-            (OperandType::Register, OperandValue::Reg(Register::Rbx)),
-        ),
-        Instruction::Sub(
-            (OperandType::Register, OperandValue::Reg(Register::Rax)),
-            (OperandType::Register, OperandValue::Reg(Register::Rbx)),
-        ),
-        // Instruction::Inv((OperandType::Register, OperandValue::Reg(Register::Rax))),
+        // Instruction::Mov(
+        //     (OperandType::Immediate, OperandValue::Imm(12)),
+        //     (OperandType::Register, OperandValue::Reg(Register::Rax)),
+        // ),
+        // Instruction::Mov(
+        //     (OperandType::Immediate, OperandValue::Imm(7)),
+        //     (OperandType::Register, OperandValue::Reg(Register::Rbx)),
+        // ),
+        // Instruction::Sub(
+        //     (OperandType::Register, OperandValue::Reg(Register::Rax)),
+        //     (OperandType::Register, OperandValue::Reg(Register::Rbx)),
+        // ),
+        Instruction::Inv((OperandType::Memory, OperandValue::Reg(Register::Rax))),
         // Instruction::Inv((OperandType::Memory, OperandValue::Imm(0))),
         // Instruction::Not((OperandType::Register, OperandValue::Reg(Register::Rax))),
         Instruction::Hlt,
