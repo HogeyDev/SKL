@@ -1,4 +1,4 @@
-use std::{num::Wrapping, ptr::with_exposed_provenance};
+use std::num::Wrapping;
 
 use crate::iset::{Instruction, Program};
 
@@ -22,6 +22,7 @@ pub struct Cpu {
     pub memory: Box<[u8]>,
 }
 
+#[derive(Debug, Clone, Copy)]
 pub enum CpuFlag { // u8
     Halt        = 0x01,
     Overflow    = 0x02,
@@ -409,9 +410,9 @@ impl Cpu {
             }
             0x05 => {
                 let locb = self.get_mem(self.rip);
+                let reg = self.get_mem(self.rip) & 0xf;
                 self.rip += 1;
 
-                let reg = self.get_mem(self.rip) & 0xf;
                 match locb >> 4 & 0b11 {
                     0b01 => {
                         let mut imm: Arch = 0;
@@ -432,6 +433,72 @@ impl Cpu {
                         let addr = self.reg_value(reg);
                         let val = !self.get_mem(addr);
                         self.set_mem(addr, val);
+                    }
+                    x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
+                }
+            }
+            0x06 => {
+                let byte = self.get_mem(self.rip);
+                let locb = byte >> 4 & 0b11;
+                let reg = byte & 0xf;
+                self.rip += 1;
+
+                match locb {
+                    0b01 => {
+                        let mut imm: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            imm = imm << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let val = (self.get_mem(imm) == 0) as u8;
+                        self.set_mem(imm, val);
+                    }
+                    0b10 => {
+                        let reg_addr = self.reg_code(reg);
+                        let val = (*reg_addr == 0) as Arch;
+                        *reg_addr = val;
+                    }
+                    0b11 => {
+                        let addr = self.reg_value(reg);
+                        let val = (self.get_mem(addr) == 0) as u8;
+                        self.set_mem(addr, val);
+                    }
+                    x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
+                }
+            }
+            0x07 => {
+                let byte = self.get_mem(self.rip);
+                let locb = byte >> 4 & 0b11;
+                let reg = byte & 0xf;
+                self.rip += 1;
+
+                match locb {
+                    0b00 => {
+                        let mut imm: Arch = 0;
+                        for i in 0..ARCH {
+                            imm = imm << 8 | self.get_mem(self.rip + i as Arch) as Arch;
+                        }
+                        self.rip += ARCH as Arch;
+
+                        self.rip = imm;
+                    }
+                    0b01 => {
+                        let mut imm: Arch = 0;
+                        for i in 0..ARCH {
+                            imm = imm << 8 | self.get_mem(self.rip + i as Arch) as Arch;
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let addr = self.get_mem(imm) as Arch;
+                        self.rip = addr;
+                    }
+                    0b10 => {
+                        self.rip = self.reg_value(reg);
+                    }
+                    0b11 => {
+                        let reg_val = self.reg_value(reg);
+                        self.rip = self.get_mem(reg_val) as Arch;
                     }
                     x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
                 }

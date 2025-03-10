@@ -1,6 +1,6 @@
 use std::u8;
 
-use crate::cpu::Arch;
+use crate::cpu::{Arch, CpuFlag};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OperandType {
@@ -49,13 +49,20 @@ pub enum Instruction {
     // 1: is memory
     //     on means memory, off means reg / mem
     // 2: source register (if applicable)
+
     Nop,
     Hlt,
+
     Mov(Operand, Operand),
+
     Add(Operand, Operand),
     Sub(Operand, Operand),
-    Inv(Operand),
+
     Not(Operand),
+    Inv(Operand),
+
+    Jmp(Operand),
+    JmpCond(CpuFlag, Operand),
 }
 
 pub type Program = Vec<Instruction>;
@@ -66,61 +73,45 @@ impl Instruction {
             Self::Nop => vec![0x00],
             Self::Hlt => vec![0x01],
             Self::Mov(src, dest) => {
-                let mut operand_bytes = Instruction::operand_bytes(src, dest);
+                let mut operand_bytes = Instruction::double_operand_bytes(src, dest);
                 let mut bytes = Vec::from([0x02]);
                 bytes.append(&mut operand_bytes);
                 bytes
             }
             Self::Add(src, dest) => {
-                let mut operand_bytes = Instruction::operand_bytes(src, dest);
+                let mut operand_bytes = Instruction::double_operand_bytes(src, dest);
                 let mut bytes = Vec::from([0x03]);
                 bytes.append(&mut operand_bytes);
                 bytes
             }
             Self::Sub(src, dest) => {
-                let mut operand_bytes = Instruction::operand_bytes(src, dest);
+                let mut operand_bytes = Instruction::double_operand_bytes(src, dest);
                 let mut bytes = Vec::from([0x04]);
                 bytes.append(&mut operand_bytes);
                 bytes
             }
-            Self::Inv(op) => {
-                let mem = (op.0 == OperandType::Memory) as u8;
-
-                let (is_reg, reg_or_imm) = match op.1 {
-                    OperandValue::Imm(x) => (0, x),
-                    OperandValue::Reg(x) => (1, x as Arch),
-                };
-
-                let byte = is_reg << 5 | mem << 4 |
-                    if is_reg != 0 {
-                        reg_or_imm as u8
-                    } else { 0 } << 4;
-
-                let mut bytes = vec![0x05, byte];
-                if is_reg == 0 {
-                    bytes.append(&mut Instruction::split_number(reg_or_imm));
-                }
-
+            Self::Not(op) => {
+                let mut op_bytes = Instruction::single_operand_bytes(op);
+                let mut bytes = Vec::from([0x05]);
+                bytes.append(&mut op_bytes);
                 bytes
             }
-            Self::Not(op) => {
-                let mem = (op.0 == OperandType::Memory) as u8;
-
-                let (is_reg, reg_or_imm) = match op.1 {
-                    OperandValue::Imm(x) => (0, x),
-                    OperandValue::Reg(x) => (1, x as Arch),
-                };
-
-                let byte = is_reg << 5 | mem << 4 |
-                    if is_reg != 0 {
-                        reg_or_imm as u8
-                    } else { 0 } << 4;
-
-                let mut bytes = vec![0x06, byte];
-                if is_reg == 0 {
-                    bytes.append(&mut Instruction::split_number(reg_or_imm));
-                }
-
+            Self::Inv(op) => {
+                let mut op_bytes = Instruction::single_operand_bytes(op);
+                let mut bytes = Vec::from([0x06]);
+                bytes.append(&mut op_bytes);
+                bytes
+            }
+            Self::Jmp(op) => {
+                let mut op_bytes = Instruction::single_operand_bytes(op);
+                let mut bytes = Vec::from([0x07]);
+                bytes.append(&mut op_bytes);
+                bytes
+            }
+            Self::JmpCond(cond, op) => {
+                let mut op_bytes = Instruction::single_operand_bytes(op);
+                let mut bytes = Vec::from([0x08, cond as u8]);
+                bytes.append(&mut op_bytes);
                 bytes
             }
         }
@@ -132,7 +123,26 @@ impl Instruction {
         }
         bytes
     }
-    fn operand_bytes(src: Operand, dest: Operand) -> Vec<u8> {
+    fn single_operand_bytes(src: Operand) -> Vec<u8> {
+        let mem = (src.0 == OperandType::Memory) as u8;
+        let (is_reg, reg_or_imm) = match src.1 {
+            OperandValue::Imm(x) => (0, x),
+            OperandValue::Reg(x) => (1, x as Arch),
+        };
+
+        let byte = is_reg << 5 | mem << 4 |
+            if is_reg != 0 {
+                reg_or_imm as u8
+            } else { 0 } << 4;
+
+        let mut bytes = vec![byte];
+        if is_reg == 0 {
+            bytes.append(&mut Instruction::split_number(reg_or_imm));
+        }
+
+        bytes
+    }
+    fn double_operand_bytes(src: Operand, dest: Operand) -> Vec<u8> {
         let src_mem = (src.0 == OperandType::Memory) as u8;
         let dest_mem = (dest.0 == OperandType::Memory) as u8;
 
