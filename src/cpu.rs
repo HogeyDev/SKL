@@ -1,3 +1,5 @@
+use std::{num::Wrapping, ops::Deref};
+
 use crate::iset::{Instruction, Program};
 
 pub type Arch = u64;
@@ -96,14 +98,18 @@ impl Cpu {
         }
     }
     pub fn print_registers(&self) {
-        println!("rax: {}", self.rax);
-        println!("rbx: {}", self.rbx);
-        println!("rcx: {}", self.rcx);
-        println!("rdx: {}", self.rdx);
+        fn preg(name: &str, value: Arch, width: usize) {
+            println!("{name}: {:0width$x}", value, width=width*2);
+        }
 
-        println!("rbp: {}", self.rbp);
-        println!("rsp: {}", self.rsp);
-        println!("rip: {}", self.rip);
+        preg("rax", self.rax, ARCH);
+        preg("rbx", self.rbx, ARCH);
+        preg("rcx", self.rcx, ARCH);
+        preg("rdx", self.rdx, ARCH);
+
+        preg("rbp", self.rbp, ARCH);
+        preg("rsp", self.rsp, ARCH);
+        preg("rip", self.rip, ARCH);
     }
 
     pub fn get_flag(&self, bit: CpuFlag) -> bool {
@@ -123,6 +129,20 @@ impl Cpu {
             0b0100 => &mut self.rbp,
             0b0101 => &mut self.rsp,
             0b0110 => &mut self.rip,
+
+            x => panic!("unknown register code: {x:x}"),
+        }
+    }
+    pub fn reg_value(&self, code: u8) -> Arch {
+        match code {
+            0b0000 => self.rax,
+            0b0001 => self.rbx,
+            0b0010 => self.rcx,
+            0b0011 => self.rdx,
+
+            0b0100 => self.rbp,
+            0b0101 => self.rsp,
+            0b0110 => self.rip,
 
             x => panic!("unknown register code: {x:x}"),
         }
@@ -197,9 +217,217 @@ impl Cpu {
                         let mem_val = self.get_mem(src_value);
                         *self.reg_code(dest_reg) = mem_val as Arch;
                     }
-                    0b1100 => {}
-                    0b1101 => {}
-                    0b1110 => {}
+                    0b1100 => {
+                        *self.reg_code(dest_reg) = *self.reg_code(src_reg);
+                    }
+                    0b1101 => {
+                        let val = Instruction::split_number(*self.reg_code(src_reg)).into_boxed_slice();
+                        let addr = *self.reg_code(dest_reg);
+                        self.set_mem_slice(addr, val);
+                    }
+                    0b1110 => {
+                        let val = *self.reg_code(src_reg);
+                        *self.reg_code(dest_reg) = self.get_mem(val) as Arch;
+                    }
+                    x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
+                }
+            }
+            0x03 => {
+                let locb = self.get_mem(self.rip);
+                self.rip += 1;
+
+                let regs = self.get_mem(self.rip);
+                let src_reg = regs >> 4 & 0xf;
+                let dest_reg = regs & 0xf;
+
+                self.rip += 1;
+                match locb & 0xf {
+                    0b0001 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+                        let mut dest_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            dest_value = dest_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let value = Wrapping(self.get_mem(dest_value) as Arch) + Wrapping(src_value);
+                        self.set_mem_slice(dest_value, Instruction::split_number(value.0).into_boxed_slice());
+                    }
+                    0b0100 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let dest = self.reg_code(dest_reg);
+                        *dest = (Wrapping(*dest) + Wrapping(src_value)).0;
+                    }
+                    0b0101 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let reg_val = (Wrapping(*self.reg_code(dest_reg)) + Wrapping(src_value)).0;
+                        self.set_mem_slice(reg_val, Instruction::split_number(reg_val).into_boxed_slice());
+                    }
+                    0b0110 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let mem_val = self.get_mem(src_value);
+                        let dest = self.reg_code(dest_reg);
+                        *dest = (Wrapping(*dest) + Wrapping(mem_val as Arch)).0;
+                    }
+                    0b1001 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let mem_val = self.get_mem(src_value);
+                        let dest = self.reg_code(dest_reg);
+                        *dest = (Wrapping(*dest) + Wrapping(mem_val as Arch)).0;
+                    }
+                    0b1100 => {
+                        let src = self.reg_value(src_reg);
+                        let dest = self.reg_code(dest_reg);
+                        let val = Wrapping(*dest) + Wrapping(src);
+                        *dest = val.0;
+                    }
+                    0b1101 => {
+                        let dest_val = *self.reg_code(dest_reg);
+                        let value = Wrapping(dest_val) + Wrapping(self.reg_value(src_reg));
+                        let split = Instruction::split_number(value.0).into_boxed_slice();
+                        self.set_mem_slice(dest_val, split);
+                    }
+                    0b1110 => {
+                        let val = self.get_mem(self.reg_value(src_reg)) as Arch;
+                        let dest = self.reg_code(dest_reg);
+                        *dest = (Wrapping(*dest) + Wrapping(val)).0;
+                    }
+                    x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
+                }
+            }
+            0x04 => {
+
+                let locb = self.get_mem(self.rip);
+                self.rip += 1;
+
+                let regs = self.get_mem(self.rip);
+                let src_reg = regs >> 4 & 0xf;
+                let dest_reg = regs & 0xf;
+
+                self.rip += 1;
+                match locb & 0xf {
+                    0b0001 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+                        let mut dest_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            dest_value = dest_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let value = Wrapping(self.get_mem(dest_value) as Arch) - Wrapping(src_value);
+                        self.set_mem_slice(dest_value, Instruction::split_number(value.0).into_boxed_slice());
+                    }
+                    0b0100 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let dest = self.reg_code(dest_reg);
+                        *dest = (Wrapping(*dest) - Wrapping(src_value)).0;
+                    }
+                    0b0101 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let reg_val = (Wrapping(*self.reg_code(dest_reg)) - Wrapping(src_value)).0;
+                        self.set_mem_slice(reg_val, Instruction::split_number(reg_val).into_boxed_slice());
+                    }
+                    0b0110 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let mem_val = self.get_mem(src_value);
+                        let dest = self.reg_code(dest_reg);
+                        *dest = (Wrapping(*dest) - Wrapping(mem_val as Arch)).0;
+                    }
+                    0b1001 => {
+                        let mut src_value: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            src_value = src_value << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let mem_val = self.get_mem(src_value);
+                        let dest = self.reg_code(dest_reg);
+                        *dest = (Wrapping(*dest) - Wrapping(mem_val as Arch)).0;
+                    }
+                    0b1100 => {
+                        let src = self.reg_value(src_reg);
+                        let dest = self.reg_code(dest_reg);
+                        let val = Wrapping(*dest) - Wrapping(src);
+                        *dest = val.0;
+                    }
+                    0b1101 => {
+                        let dest_val = *self.reg_code(dest_reg);
+                        let value = Wrapping(dest_val) - Wrapping(self.reg_value(src_reg));
+                        let split = Instruction::split_number(value.0).into_boxed_slice();
+                        self.set_mem_slice(dest_val, split);
+                    }
+                    0b1110 => {
+                        let val = self.get_mem(self.reg_value(src_reg)) as Arch;
+                        let dest = self.reg_code(dest_reg);
+                        *dest = (Wrapping(*dest) - Wrapping(val)).0;
+                    }
+                    x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
+                }
+            }
+            0x05 => {
+                unimplemented!();
+                let locb = self.get_mem(self.rip);
+                self.rip += 1;
+
+                let reg = self.get_mem(self.rip) & 0xf;
+
+                self.rip += 1;
+                match locb >> 4 & 0b11 {
+                    0b01 => {
+                        let mut imm: Arch = 0;
+                        for i in 0..size_of::<Arch>() {
+                            imm = imm << 8 | self.get_mem(self.rip + i as Arch) as Arch; // regs should already be processed, so we shouldn't be off by one (:pray)
+                        }
+                        self.rip += ARCH as Arch;
+
+                        let val = !self.get_mem(imm);
+                        self.set_mem(imm, val);
+                    }
+                    // 0b10 => {}
+                    // 0b11 => {}
                     x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
                 }
             }
