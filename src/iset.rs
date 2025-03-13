@@ -42,8 +42,11 @@ pub enum Instruction {
     // 2: source register (if applicable)
     // 3: destination register (if applicable)
     //
-    // TWO OPERANDS
-    // [__ 0 1 2222]
+    // ONE OPERAND
+    // [9 8 0 1 2222]
+    // 9: is inverse (if jump)
+    //     ex: jnz (jump if not zero flag)
+    // 8: is relative (if jump)
     // 0: imm / reg
     //     on means register, off means immediate
     // 1: is memory
@@ -61,8 +64,9 @@ pub enum Instruction {
     Not(Operand),
     Inv(Operand),
 
-    Jmp(Operand),
-    JmpCond(CpuFlag, Operand),
+    Jmp(bool, Operand),
+    JmpCond(bool, bool, CpuFlag, Operand),
+    Cmp(Operand, Operand),
 }
 
 pub type Program = Vec<Instruction>;
@@ -102,16 +106,25 @@ impl Instruction {
                 bytes.append(&mut op_bytes);
                 bytes
             }
-            Self::Jmp(op) => {
+            Self::Jmp(rel, op) => {
                 let mut op_bytes = Instruction::single_operand_bytes(op);
+                op_bytes[0] |= (rel as u8) << 6;
                 let mut bytes = Vec::from([0x07]);
                 bytes.append(&mut op_bytes);
                 bytes
             }
-            Self::JmpCond(cond, op) => {
+            Self::JmpCond(rel, inverse, cond, op) => {
                 let mut op_bytes = Instruction::single_operand_bytes(op);
+                op_bytes[0] |= (inverse as u8) << 7;
+                op_bytes[0] |= (rel as u8) << 6;
                 let mut bytes = Vec::from([0x08, cond as u8]);
                 bytes.append(&mut op_bytes);
+                bytes
+            }
+            Self::Cmp(src, dest) => {
+                let mut operand_bytes = Instruction::double_operand_bytes(src, dest);
+                let mut bytes = Vec::from([0x09]);
+                bytes.append(&mut operand_bytes);
                 bytes
             }
         }
