@@ -1,0 +1,23 @@
+import linked_list;
+
+func main(int) {
+    let list: @LinkedList = LinkedList_new();
+
+    let i: int = 0;
+    while (i < 32) {
+        LinkedList_push(list, <!@void> i);
+    
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < 32) {
+        let node: @LinkedListNode = LinkedList_get(list, <!usize> i);
+        print_int(<!int> node->value);
+        print_char('\n');
+
+        i = i + 1;
+    }
+
+    return 16;
+}

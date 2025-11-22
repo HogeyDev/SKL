@@ -450,7 +450,7 @@ impl Cpu {
                         for i in 0..ARCH {
                             imm = imm << 8 | self.get_mem(self.rip + i as Arch) as Arch;
                         }
-                        self.rip += ARCH as Arch;
+                        // self.rip += ARCH as Arch;
 
                         self.rip = imm;
                     }
@@ -459,7 +459,7 @@ impl Cpu {
                         for i in 0..ARCH {
                             imm = imm << 8 | self.get_mem(self.rip + i as Arch) as Arch;
                         }
-                        self.rip += ARCH as Arch;
+                        // self.rip += ARCH as Arch;
 
                         let addr = self.get_mem(imm) as Arch;
                         self.rip = addr;
@@ -475,6 +475,7 @@ impl Cpu {
                 }
             }
             0x08 => {
+                // eprintln!("{}", self.get_mem(self.rip));
                 let flag = CpuFlag::try_from(self.get_mem(self.rip)).unwrap();
                 self.rip += 1;
 
@@ -519,6 +520,11 @@ impl Cpu {
                     }
                     x => panic!("illegal mod bits: {x:x} (opcode: {opcode:x})"),
                 }
+                // eprintln!("rax after: {}", self.rax);
+                // self.print_registers();
+                // if self.rax < 600 {
+                //     std::process::exit(1);
+                // }
             }
             0x09 => {
                 let locb = self.get_mem(self.rip);

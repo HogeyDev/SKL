@@ -1,0 +1,13 @@
+static heap: [1048576]char;
+static heap_pointer: usize = <!usize> 0;
+
+func malloc(@void, bytes: usize) {
+    let top: usize = heap_pointer;
+    heap_pointer = heap_pointer + bytes;
+
+    return &heap[top];
+}
+
+func free(void, ptr: @void) {
+    // TODO: so, about that
+}

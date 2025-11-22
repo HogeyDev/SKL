@@ -29,13 +29,17 @@ fn main() {
     //     Instruction::JmpCond(false, true, CpuFlag::Zero, (OperandType::Immediate, OperandValue::Imm(22))),
     //     Instruction::Hlt,
     // ];
-    
+    let args: Vec<String> = std::env::args().collect();
+
     let mut cpu: Cpu = Cpu::new();
 
     // cpu.rsp = cpu.load_program_vec(p);
     // let bin: Vec<u8> = cpu.memory[..(cpu.rsp as usize)].to_vec();
     // _ = std::fs::write("raw.bin", bin);
-    cpu.rsp = cpu.load_program_file("raw.bin");
+    cpu.rsp = cpu.load_program_file(args.get(1).expect("no input file given"));
+    // cpu.rsp = cpu.load_program_vec(vec![
+    //     Instruction::JmpCond(false, true, CpuFlag::Overflow, (OperandType::Immediate, OperandValue::Imm(23)))
+    // ]);
     cpu.rbp = cpu.rsp;
     cpu.print_stack_context((0, 32));
 

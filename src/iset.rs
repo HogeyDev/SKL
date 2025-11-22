@@ -41,7 +41,7 @@ pub enum Instruction {
     //     on means memory, off means reg / mem
     // 2: source register (if applicable)
     // 3: destination register (if applicable)
-    //
+
     // ONE OPERAND
     // [9 8 0 1 2222]
     // 9: is inverse (if jump)

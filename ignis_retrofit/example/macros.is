@@ -1,0 +1,11 @@
+import stdio;
+
+macro call(fp, arg) {
+    fp(arg);
+}
+
+func main(int) {
+    call(println, "Macro? Never heard of her...");
+
+    return 42;
+}

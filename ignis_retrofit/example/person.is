@@ -1,0 +1,68 @@
+import stdio;
+// import stdlib;
+
+struct Car {
+    color: []char;
+    model: []char;
+    year: int;
+}
+
+struct Person {     // 16 bytes
+    name: []char;   // 8 bytes
+    age: int;       // 8 bytes
+    car: Car;
+}
+
+func print_person(void, person: Person) {
+    print("Hi, my name is ");
+    print(person.name);
+    print(" and I'm ");
+    print_int(person.age);
+    print(" years old. I own a ");
+    print(person.car.color);
+    print(" ");
+    print_int(person.car.year);
+    print(" ");
+    print(person.car.model);
+    println(".");
+}
+
+func print_person_ref(void, person: @Person) {
+    print("Their name is ");
+    print(person->name);
+    print(" and they're ");
+    print_int(person->age);
+    print(" years old. They own a ");
+    print(person->car.color);
+    print(" ");
+    print_int(person->car.year);
+    print(" ");
+    print(person->car.model);
+    println(".");
+}
+
+func main(int) {
+    let person: Person;
+    person.age = 18;
+    person.name = "Kourtet";
+
+    let car: Car;
+    car.color = "Blue";
+    car.model = "Acura TL";
+    car.year = 2008;
+    person.car = car;
+
+    print_person(person);
+    let cool_ref: @Person = &person;
+    let memory_padding: int = 42; // I serve ZERO purpose other than padding memory
+    print_person_ref(cool_ref);
+
+    let x: int = 0;
+    while (x < 10) {
+        print_int(x);
+        x = x + 1;
+    }
+    println("");
+
+    return person.age;
+}
